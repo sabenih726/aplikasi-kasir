@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ShoppingCart, TrendingUp, Receipt, Package, RefreshCw } from "lucide-react"
 import Link from "next/link"
+import { cleanupDuplicateTransactions } from "@/lib/localStorage"
 
 interface Transaction {
   id: string
@@ -57,6 +58,16 @@ export default function Dashboard() {
     }).format(amount)
   }
 
+  const handleCleanupDuplicates = () => {
+    const removed = cleanupDuplicateTransactions()
+    if (removed > 0) {
+      alert(`${removed} transaksi duplikat telah dihapus`)
+      loadData() // Refresh data
+    } else {
+      alert("Tidak ada duplikasi ditemukan")
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -67,6 +78,9 @@ export default function Dashboard() {
           <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh Data
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleCleanupDuplicates}>
+            Bersihkan Duplikat
           </Button>
         </div>
 

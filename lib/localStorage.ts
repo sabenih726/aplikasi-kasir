@@ -35,6 +35,13 @@ export const defaultProducts: Product[] = [
   { id: "8", name: "Roti Abon", price: 16000 },
 ]
 
+// Generate unique transaction ID
+export const generateTransactionId = (): string => {
+  const timestamp = Date.now()
+  const random = Math.floor(Math.random() * 1000)
+  return `${timestamp}${random}`
+}
+
 // Products operations
 export const getProducts = (): Product[] => {
   try {
@@ -94,7 +101,20 @@ export const deleteProduct = (id: string): boolean => {
 export const getTransactions = (): Transaction[] => {
   try {
     const transactions = localStorage.getItem("transactions")
-    return transactions ? JSON.parse(transactions) : []
+    const parsedTransactions = transactions ? JSON.parse(transactions) : []
+
+    // Remove duplicates based on ID
+    const uniqueTransactions = parsedTransactions.filter(
+      (transaction: Transaction, index: number, self: Transaction[]) =>
+        index === self.findIndex((t) => t.id === transaction.id),
+    )
+
+    // If duplicates were found, save the cleaned data
+    if (uniqueTransactions.length !== parsedTransactions.length) {
+      localStorage.setItem("transactions", JSON.stringify(uniqueTransactions))
+    }
+
+    return uniqueTransactions
   } catch (error) {
     console.error("Error loading transactions:", error)
     return []
@@ -104,7 +124,20 @@ export const getTransactions = (): Transaction[] => {
 export const saveTransaction = (transaction: Transaction): void => {
   try {
     const transactions = getTransactions()
-    transactions.push(transaction)
+
+    // Check if transaction with same ID already exists
+    const existingIndex = transactions.findIndex((t) => t.id === transaction.id)
+
+    if (existingIndex >= 0) {
+      // Update existing transaction instead of adding duplicate
+      transactions[existingIndex] = transaction
+      console.log("Updated existing transaction:", transaction.id)
+    } else {
+      // Add new transaction
+      transactions.push(transaction)
+      console.log("Added new transaction:", transaction.id)
+    }
+
     localStorage.setItem("transactions", JSON.stringify(transactions))
   } catch (error) {
     console.error("Error saving transaction:", error)
@@ -180,4 +213,21 @@ export const importData = (file: File): Promise<boolean> => {
 export const clearAllData = (): void => {
   localStorage.removeItem("products")
   localStorage.removeItem("transactions")
+}
+
+// Clean up duplicates (utility function)
+export const cleanupDuplicateTransactions = (): number => {
+  const transactions = JSON.parse(localStorage.getItem("transactions") || "[]")
+  const uniqueTransactions = transactions.filter(
+    (transaction: Transaction, index: number, self: Transaction[]) =>
+      index === self.findIndex((t) => t.id === transaction.id),
+  )
+
+  const duplicatesRemoved = transactions.length - uniqueTransactions.length
+
+  if (duplicatesRemoved > 0) {
+    localStorage.setItem("transactions", JSON.stringify(uniqueTransactions))
+  }
+
+  return duplicatesRemoved
 }
