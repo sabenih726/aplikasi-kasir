@@ -7,30 +7,30 @@ import { Separator } from "@/components/ui/separator"
 import { ArrowLeft, Printer, Share } from "lucide-react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-
-interface Transaction {
-  id: string
-  date: string
-  items: Array<{
-    name: string
-    price: number
-    quantity: number
-  }>
-  total: number
-  paymentMethod: string
-  cashReceived?: number
-  change?: number
-}
+import { getTransactionById, type Transaction } from "@/lib/database"
 
 export default function StrukPage() {
   const params = useParams()
   const [transaction, setTransaction] = useState<Transaction | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const transactions = JSON.parse(localStorage.getItem("transactions") || "[]")
-    const found = transactions.find((t: Transaction) => t.id === params.id)
-    setTransaction(found || null)
+    loadTransaction()
   }, [params.id])
+
+  const loadTransaction = async () => {
+    if (!params.id || typeof params.id !== "string") return
+
+    setLoading(true)
+    try {
+      const data = await getTransactionById(params.id)
+      setTransaction(data)
+    } catch (error) {
+      console.error("Error loading transaction:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -45,13 +45,24 @@ export default function StrukPage() {
 
   const handleShare = () => {
     if (navigator.share && transaction) {
-      const text = `Struk Belanja Toko Roti\n\nNo: #${transaction.id.slice(-6)}\nTanggal: ${new Date(transaction.date).toLocaleString("id-ID")}\n\nItem:\n${transaction.items.map((item) => `${item.name} x${item.quantity} = ${formatCurrency(item.price * item.quantity)}`).join("\n")}\n\nTotal: ${formatCurrency(transaction.total)}\nPembayaran: ${transaction.paymentMethod.toUpperCase()}\n\nTerima kasih!`
+      const text = `Struk Belanja Toko Roti\n\nNo: #${transaction.transaction_number}\nTanggal: ${new Date(transaction.created_at).toLocaleString("id-ID")}\n\nItem:\n${transaction.transaction_items?.map((item) => `${item.product_name} x${item.quantity} = ${formatCurrency(item.subtotal)}`).join("\n")}\n\nTotal: ${formatCurrency(transaction.total)}\nPembayaran: ${transaction.payment_method.toUpperCase()}\n\nTerima kasih!`
 
       navigator.share({
         title: "Struk Belanja",
         text: text,
       })
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Memuat struk...</p>
+        </div>
+      </div>
+    )
   }
 
   if (!transaction) {
@@ -98,11 +109,11 @@ export default function StrukPage() {
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
                 <span>No. Transaksi:</span>
-                <span className="font-mono">#{transaction.id.slice(-6)}</span>
+                <span className="font-mono">#{transaction.transaction_number}</span>
               </div>
               <div className="flex justify-between">
                 <span>Tanggal:</span>
-                <span>{new Date(transaction.date).toLocaleString("id-ID")}</span>
+                <span>{new Date(transaction.created_at).toLocaleString("id-ID")}</span>
               </div>
               <div className="flex justify-between">
                 <span>Kasir:</span>
@@ -114,16 +125,16 @@ export default function StrukPage() {
 
             {/* Items */}
             <div className="space-y-2">
-              {transaction.items.map((item, index) => (
+              {transaction.transaction_items?.map((item, index) => (
                 <div key={index} className="space-y-1">
                   <div className="flex justify-between">
-                    <span className="font-medium">{item.name}</span>
+                    <span className="font-medium">{item.product_name}</span>
                   </div>
                   <div className="flex justify-between text-sm text-gray-600">
                     <span>
                       {item.quantity} x {formatCurrency(item.price)}
                     </span>
-                    <span>{formatCurrency(item.price * item.quantity)}</span>
+                    <span>{formatCurrency(item.subtotal)}</span>
                   </div>
                 </div>
               ))}
@@ -140,18 +151,18 @@ export default function StrukPage() {
 
               <div className="flex justify-between text-sm">
                 <span>Pembayaran:</span>
-                <span className="uppercase">{transaction.paymentMethod}</span>
+                <span className="uppercase">{transaction.payment_method}</span>
               </div>
 
-              {transaction.paymentMethod === "tunai" && (
+              {transaction.payment_method === "tunai" && transaction.cash_received && (
                 <>
                   <div className="flex justify-between text-sm">
                     <span>Diterima:</span>
-                    <span>{formatCurrency(transaction.cashReceived || 0)}</span>
+                    <span>{formatCurrency(transaction.cash_received)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Kembalian:</span>
-                    <span>{formatCurrency(transaction.change || 0)}</span>
+                    <span>{formatCurrency(transaction.change_amount || 0)}</span>
                   </div>
                 </>
               )}

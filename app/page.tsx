@@ -4,38 +4,37 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ShoppingCart, TrendingUp, Receipt, Package } from "lucide-react"
+import { ShoppingCart, TrendingUp, Receipt, Package, RefreshCw } from "lucide-react"
 import Link from "next/link"
-
-interface Transaction {
-  id: string
-  date: string
-  total: number
-  items: Array<{
-    name: string
-    price: number
-    quantity: number
-  }>
-  paymentMethod: string
-}
+import { getTodayStats, getTransactions, type Transaction } from "@/lib/database"
+import { SupabaseStatus } from "@/components/supabase-status"
 
 export default function Dashboard() {
   const [todaySales, setTodaySales] = useState(0)
   const [todayTransactions, setTodayTransactions] = useState(0)
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      // Load today's stats
+      const stats = await getTodayStats()
+      setTodaySales(stats.totalSales)
+      setTodayTransactions(stats.totalTransactions)
+
+      // Load recent transactions
+      const transactions = await getTransactions(5)
+      setRecentTransactions(transactions)
+    } catch (error) {
+      console.error("Error loading dashboard data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    // Load data from localStorage
-    const transactions = JSON.parse(localStorage.getItem("transactions") || "[]")
-    const today = new Date().toDateString()
-
-    const todayTxns = transactions.filter((t: Transaction) => new Date(t.date).toDateString() === today)
-
-    const totalSales = todayTxns.reduce((sum: number, t: Transaction) => sum + t.total, 0)
-
-    setTodaySales(totalSales)
-    setTodayTransactions(todayTxns.length)
-    setRecentTransactions(transactions.slice(-5).reverse())
+    loadData()
   }, [])
 
   const formatCurrency = (amount: number) => {
@@ -52,7 +51,14 @@ export default function Dashboard() {
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold text-gray-900">Kasir Toko Roti</h1>
           <p className="text-gray-600">Sistem Point of Sale untuk UMK</p>
+          <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            Refresh Data
+          </Button>
         </div>
+
+        {/* Supabase Status Alert */}
+        <SupabaseStatus />
 
         {/* Quick Actions */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -84,7 +90,9 @@ export default function Dashboard() {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{formatCurrency(todaySales)}</div>
+              <div className="text-2xl font-bold text-green-600">
+                {loading ? "Loading..." : formatCurrency(todaySales)}
+              </div>
               <p className="text-xs text-muted-foreground">{todayTransactions} transaksi</p>
             </CardContent>
           </Card>
@@ -96,11 +104,15 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {recentTransactions.length > 0 ? formatCurrency(recentTransactions[0].total) : formatCurrency(0)}
+                {loading
+                  ? "Loading..."
+                  : recentTransactions.length > 0
+                    ? formatCurrency(recentTransactions[0].total)
+                    : formatCurrency(0)}
               </div>
               <p className="text-xs text-muted-foreground">
                 {recentTransactions.length > 0
-                  ? new Date(recentTransactions[0].date).toLocaleTimeString("id-ID")
+                  ? new Date(recentTransactions[0].created_at).toLocaleTimeString("id-ID")
                   : "Belum ada transaksi"}
               </p>
             </CardContent>
@@ -113,18 +125,22 @@ export default function Dashboard() {
             <CardTitle>Transaksi Terbaru</CardTitle>
           </CardHeader>
           <CardContent>
-            {recentTransactions.length === 0 ? (
+            {loading ? (
+              <p className="text-center text-gray-500 py-8">Memuat data...</p>
+            ) : recentTransactions.length === 0 ? (
               <p className="text-center text-gray-500 py-8">Belum ada transaksi hari ini</p>
             ) : (
               <div className="space-y-4">
                 {recentTransactions.map((transaction) => (
                   <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="space-y-1">
-                      <p className="font-medium">#{transaction.id.slice(-6)}</p>
-                      <p className="text-sm text-gray-500">{new Date(transaction.date).toLocaleString("id-ID")}</p>
+                      <p className="font-medium">#{transaction.transaction_number}</p>
+                      <p className="text-sm text-gray-500">
+                        {new Date(transaction.created_at).toLocaleString("id-ID")}
+                      </p>
                       <div className="flex gap-2">
-                        <Badge variant="secondary">{transaction.paymentMethod}</Badge>
-                        <Badge variant="outline">{transaction.items.length} item</Badge>
+                        <Badge variant="secondary">{transaction.payment_method}</Badge>
+                        <Badge variant="outline">{transaction.transaction_items?.length || 0} item</Badge>
                       </div>
                     </div>
                     <div className="text-right">

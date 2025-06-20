@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Plus, Edit, Trash2, Package } from "lucide-react"
 import Link from "next/link"
+import { getProducts, createProduct, updateProduct, deleteProduct } from "@/lib/database"
 
 interface Product {
   id: string
@@ -30,7 +31,7 @@ const defaultProducts: Product[] = [
 ]
 
 export default function ProdukPage() {
-  const [products, setProducts] = useState<Product[]>(defaultProducts)
+  const [products, setProducts] = useState<Product[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [formData, setFormData] = useState({
@@ -38,15 +39,23 @@ export default function ProdukPage() {
     price: "",
     stock: "",
   })
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    const savedProducts = localStorage.getItem("products")
-    if (savedProducts) {
-      setProducts(JSON.parse(savedProducts))
-    } else {
-      localStorage.setItem("products", JSON.stringify(defaultProducts))
-    }
+    loadProducts()
   }, [])
+
+  const loadProducts = async () => {
+    setLoading(true)
+    try {
+      const data = await getProducts()
+      setProducts(data)
+    } catch (error) {
+      console.error("Error loading products:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -60,7 +69,7 @@ export default function ProdukPage() {
     localStorage.setItem("products", JSON.stringify(newProducts))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.name || !formData.price) {
@@ -69,25 +78,31 @@ export default function ProdukPage() {
     }
 
     const productData = {
-      id: editingProduct?.id || Date.now().toString(),
       name: formData.name,
       price: Number.parseFloat(formData.price),
       stock: formData.stock ? Number.parseInt(formData.stock) : undefined,
     }
 
-    if (editingProduct) {
-      // Update existing product
-      const updatedProducts = products.map((p) => (p.id === editingProduct.id ? productData : p))
-      saveProducts(updatedProducts)
-    } else {
-      // Add new product
-      saveProducts([...products, productData])
-    }
+    try {
+      if (editingProduct) {
+        // Update existing product
+        await updateProduct(editingProduct.id, productData)
+      } else {
+        // Add new product
+        await createProduct(productData)
+      }
 
-    // Reset form
-    setFormData({ name: "", price: "", stock: "" })
-    setShowForm(false)
-    setEditingProduct(null)
+      // Reload products
+      await loadProducts()
+
+      // Reset form
+      setFormData({ name: "", price: "", stock: "" })
+      setShowForm(false)
+      setEditingProduct(null)
+    } catch (error) {
+      console.error("Error saving product:", error)
+      alert("Terjadi kesalahan saat menyimpan produk")
+    }
   }
 
   const handleEdit = (product: Product) => {
@@ -100,10 +115,15 @@ export default function ProdukPage() {
     setShowForm(true)
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Yakin ingin menghapus produk ini?")) {
-      const updatedProducts = products.filter((p) => p.id !== id)
-      saveProducts(updatedProducts)
+      try {
+        await deleteProduct(id)
+        await loadProducts()
+      } catch (error) {
+        console.error("Error deleting product:", error)
+        alert("Terjadi kesalahan saat menghapus produk")
+      }
     }
   }
 
@@ -193,7 +213,11 @@ export default function ProdukPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {products.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Loading...</p>
+              </div>
+            ) : products.length === 0 ? (
               <div className="text-center py-8">
                 <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                 <p className="text-gray-500">Belum ada produk</p>
