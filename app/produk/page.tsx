@@ -7,28 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Plus, Edit, Trash2, Package } from "lucide-react"
+import { ArrowLeft, Plus, Edit, Trash2, Download, Upload } from "lucide-react"
 import Link from "next/link"
-import { getProducts, createProduct, updateProduct, deleteProduct } from "@/lib/database"
-
-interface Product {
-  id: string
-  name: string
-  price: number
-  stock?: number
-}
-
-const defaultProducts: Product[] = [
-  { id: "1", name: "Roti Tawar", price: 12000 },
-  { id: "2", name: "Roti Coklat", price: 15000 },
-  { id: "3", name: "Roti Keju", price: 18000 },
-  { id: "4", name: "Croissant", price: 25000 },
-  { id: "5", name: "Donat Gula", price: 8000 },
-  { id: "6", name: "Donat Coklat", price: 10000 },
-  { id: "7", name: "Roti Pisang", price: 13000 },
-  { id: "8", name: "Roti Abon", price: 16000 },
-]
+import {
+  getProducts,
+  addProduct,
+  updateProduct,
+  deleteProduct,
+  exportData,
+  importData,
+  type Product,
+} from "@/lib/localStorage"
 
 export default function ProdukPage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -39,22 +28,14 @@ export default function ProdukPage() {
     price: "",
     stock: "",
   })
-  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     loadProducts()
   }, [])
 
-  const loadProducts = async () => {
-    setLoading(true)
-    try {
-      const data = await getProducts()
-      setProducts(data)
-    } catch (error) {
-      console.error("Error loading products:", error)
-    } finally {
-      setLoading(false)
-    }
+  const loadProducts = () => {
+    const data = getProducts()
+    setProducts(data)
   }
 
   const formatCurrency = (amount: number) => {
@@ -64,18 +45,8 @@ export default function ProdukPage() {
     }).format(amount)
   }
 
-  const saveProducts = (newProducts: Product[]) => {
-    setProducts(newProducts)
-    localStorage.setItem("products", JSON.stringify(newProducts))
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!formData.name || !formData.price) {
-      alert("Nama dan harga produk harus diisi!")
-      return
-    }
 
     const productData = {
       name: formData.name,
@@ -83,26 +54,14 @@ export default function ProdukPage() {
       stock: formData.stock ? Number.parseInt(formData.stock) : undefined,
     }
 
-    try {
-      if (editingProduct) {
-        // Update existing product
-        await updateProduct(editingProduct.id, productData)
-      } else {
-        // Add new product
-        await createProduct(productData)
-      }
-
-      // Reload products
-      await loadProducts()
-
-      // Reset form
-      setFormData({ name: "", price: "", stock: "" })
-      setShowForm(false)
-      setEditingProduct(null)
-    } catch (error) {
-      console.error("Error saving product:", error)
-      alert("Terjadi kesalahan saat menyimpan produk")
+    if (editingProduct) {
+      updateProduct(editingProduct.id, productData)
+    } else {
+      addProduct(productData)
     }
+
+    loadProducts()
+    resetForm()
   }
 
   const handleEdit = (product: Product) => {
@@ -115,22 +74,32 @@ export default function ProdukPage() {
     setShowForm(true)
   }
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Yakin ingin menghapus produk ini?")) {
-      try {
-        await deleteProduct(id)
-        await loadProducts()
-      } catch (error) {
-        console.error("Error deleting product:", error)
-        alert("Terjadi kesalahan saat menghapus produk")
-      }
+  const handleDelete = (id: string) => {
+    if (confirm("Apakah Anda yakin ingin menghapus produk ini?")) {
+      deleteProduct(id)
+      loadProducts()
     }
   }
 
-  const cancelForm = () => {
+  const resetForm = () => {
     setFormData({ name: "", price: "", stock: "" })
-    setShowForm(false)
     setEditingProduct(null)
+    setShowForm(false)
+  }
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      importData(file)
+        .then(() => {
+          loadProducts()
+          alert("Data berhasil diimpor!")
+        })
+        .catch((error) => {
+          console.error("Import error:", error)
+          alert("Gagal mengimpor data!")
+        })
+    }
   }
 
   return (
@@ -146,13 +115,29 @@ export default function ProdukPage() {
             </Link>
             <h1 className="text-2xl font-bold">Kelola Produk</h1>
           </div>
-          <Button onClick={() => setShowForm(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Tambah Produk
-          </Button>
+
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={exportData}>
+              <Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
+            <label>
+              <Button variant="outline" asChild>
+                <span>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import
+                </span>
+              </Button>
+              <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+            </label>
+            <Button onClick={() => setShowForm(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Tambah Produk
+            </Button>
+          </div>
         </div>
 
-        {/* Add/Edit Form */}
+        {/* Form */}
         {showForm && (
           <Card>
             <CardHeader>
@@ -160,42 +145,42 @@ export default function ProdukPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Nama Produk *</Label>
+                    <Label htmlFor="name">Nama Produk</Label>
                     <Input
                       id="name"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Contoh: Roti Coklat"
+                      placeholder="Masukkan nama produk"
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="price">Harga *</Label>
+                    <Label htmlFor="price">Harga</Label>
                     <Input
                       id="price"
                       type="number"
                       value={formData.price}
                       onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                      placeholder="15000"
+                      placeholder="Masukkan harga"
                       required
                     />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="stock">Stok (Opsional)</Label>
-                  <Input
-                    id="stock"
-                    type="number"
-                    value={formData.stock}
-                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                    placeholder="Kosongkan jika tidak ingin melacak stok"
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="stock">Stok (Opsional)</Label>
+                    <Input
+                      id="stock"
+                      type="number"
+                      value={formData.stock}
+                      onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                      placeholder="Masukkan stok"
+                    />
+                  </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button type="submit">{editingProduct ? "Update" : "Tambah"} Produk</Button>
-                  <Button type="button" variant="outline" onClick={cancelForm}>
+                  <Button type="submit">{editingProduct ? "Update" : "Tambah"}</Button>
+                  <Button type="button" variant="outline" onClick={resetForm}>
                     Batal
                   </Button>
                 </div>
@@ -207,42 +192,29 @@ export default function ProdukPage() {
         {/* Products List */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Daftar Produk ({products.length})
-            </CardTitle>
+            <CardTitle>Daftar Produk ({products.length} item)</CardTitle>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">Loading...</p>
-              </div>
-            ) : products.length === 0 ? (
-              <div className="text-center py-8">
-                <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                <p className="text-gray-500">Belum ada produk</p>
-              </div>
+            {products.length === 0 ? (
+              <p className="text-center text-gray-500 py-8">Belum ada produk</p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-4">
                 {products.map((product) => (
-                  <div key={product.id} className="border rounded-lg p-4 space-y-3">
-                    <div>
-                      <h3 className="font-medium text-lg">{product.name}</h3>
-                      <p className="text-2xl font-bold text-green-600">{formatCurrency(product.price)}</p>
-                      {product.stock !== undefined && (
-                        <Badge variant="outline" className="mt-2">
-                          Stok: {product.stock}
-                        </Badge>
-                      )}
+                  <div key={product.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="space-y-1">
+                      <h3 className="font-medium">{product.name}</h3>
+                      <p className="text-sm text-gray-500">
+                        Harga: {formatCurrency(product.price)}
+                        {product.stock !== undefined && <span className="ml-4">Stok: {product.stock}</span>}
+                      </p>
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => handleEdit(product)} className="flex-1">
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
+                      <Button variant="outline" size="icon" onClick={() => handleEdit(product)}>
+                        <Edit className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="outline"
-                        size="sm"
+                        size="icon"
                         onClick={() => handleDelete(product.id)}
                         className="text-red-500 hover:text-red-700"
                       >

@@ -6,8 +6,18 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ShoppingCart, TrendingUp, Receipt, Package, RefreshCw } from "lucide-react"
 import Link from "next/link"
-import { getTodayStats, getTransactions, type Transaction } from "@/lib/database"
-import { SupabaseStatus } from "@/components/supabase-status"
+
+interface Transaction {
+  id: string
+  date: string
+  total: number
+  items: Array<{
+    name: string
+    price: number
+    quantity: number
+  }>
+  paymentMethod: string
+}
 
 export default function Dashboard() {
   const [todaySales, setTodaySales] = useState(0)
@@ -15,19 +25,22 @@ export default function Dashboard() {
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
 
-  const loadData = async () => {
+  const loadData = () => {
     setLoading(true)
     try {
-      // Load today's stats
-      const stats = await getTodayStats()
-      setTodaySales(stats.totalSales)
-      setTodayTransactions(stats.totalTransactions)
+      // Load data from localStorage
+      const transactions = JSON.parse(localStorage.getItem("transactions") || "[]")
+      const today = new Date().toDateString()
 
-      // Load recent transactions
-      const transactions = await getTransactions(5)
-      setRecentTransactions(transactions)
+      const todayTxns = transactions.filter((t: Transaction) => new Date(t.date).toDateString() === today)
+
+      const totalSales = todayTxns.reduce((sum: number, t: Transaction) => sum + t.total, 0)
+
+      setTodaySales(totalSales)
+      setTodayTransactions(todayTxns.length)
+      setRecentTransactions(transactions.slice(-5).reverse())
     } catch (error) {
-      console.error("Error loading dashboard data:", error)
+      console.error("Error loading data:", error)
     } finally {
       setLoading(false)
     }
@@ -56,9 +69,6 @@ export default function Dashboard() {
             Refresh Data
           </Button>
         </div>
-
-        {/* Supabase Status Alert */}
-        <SupabaseStatus />
 
         {/* Quick Actions */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -112,7 +122,7 @@ export default function Dashboard() {
               </div>
               <p className="text-xs text-muted-foreground">
                 {recentTransactions.length > 0
-                  ? new Date(recentTransactions[0].created_at).toLocaleTimeString("id-ID")
+                  ? new Date(recentTransactions[0].date).toLocaleTimeString("id-ID")
                   : "Belum ada transaksi"}
               </p>
             </CardContent>
@@ -134,13 +144,11 @@ export default function Dashboard() {
                 {recentTransactions.map((transaction) => (
                   <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="space-y-1">
-                      <p className="font-medium">#{transaction.transaction_number}</p>
-                      <p className="text-sm text-gray-500">
-                        {new Date(transaction.created_at).toLocaleString("id-ID")}
-                      </p>
+                      <p className="font-medium">#{transaction.id.slice(-6)}</p>
+                      <p className="text-sm text-gray-500">{new Date(transaction.date).toLocaleString("id-ID")}</p>
                       <div className="flex gap-2">
-                        <Badge variant="secondary">{transaction.payment_method}</Badge>
-                        <Badge variant="outline">{transaction.transaction_items?.length || 0} item</Badge>
+                        <Badge variant="secondary">{transaction.paymentMethod}</Badge>
+                        <Badge variant="outline">{transaction.items.length} item</Badge>
                       </div>
                     </div>
                     <div className="text-right">

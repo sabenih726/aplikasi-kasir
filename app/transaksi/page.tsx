@@ -10,39 +10,51 @@ import { Separator } from "@/components/ui/separator"
 import { ArrowLeft, Plus, Minus, Trash2, ShoppingCart } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { getProducts, createTransaction, type Product } from "@/lib/database"
+import { getProducts, saveTransaction, type Product } from "@/lib/localStorage"
 
 interface CartItem extends Product {
   quantity: number
   subtotal: number
 }
 
+const defaultProducts: Product[] = [
+  { id: "1", name: "Roti Tawar", price: 12000 },
+  { id: "2", name: "Roti Coklat", price: 15000 },
+  { id: "3", name: "Roti Keju", price: 18000 },
+  { id: "4", name: "Croissant", price: 25000 },
+  { id: "5", name: "Donat Gula", price: 8000 },
+  { id: "6", name: "Donat Coklat", price: 10000 },
+  { id: "7", name: "Roti Pisang", price: 13000 },
+  { id: "8", name: "Roti Abon", price: 16000 },
+]
+
 export default function TransaksiPage() {
   const router = useRouter()
-  const [products, setProducts] = useState<Product[]>([])
+  const [products, setProducts] = useState<Product[]>(defaultProducts)
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedProduct, setSelectedProduct] = useState("")
   const [quantity, setQuantity] = useState(1)
   const [paymentMethod, setPaymentMethod] = useState("tunai")
   const [cashReceived, setCashReceived] = useState("")
   const [showPayment, setShowPayment] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [processing, setProcessing] = useState(false)
+
+  useEffect(() => {
+    // Load products from localStorage
+    const savedProducts = localStorage.getItem("products")
+    if (savedProducts) {
+      setProducts(JSON.parse(savedProducts))
+    } else {
+      localStorage.setItem("products", JSON.stringify(defaultProducts))
+    }
+  }, [])
 
   useEffect(() => {
     loadProducts()
   }, [])
 
-  const loadProducts = async () => {
-    setLoading(true)
-    try {
-      const data = await getProducts()
-      setProducts(data)
-    } catch (error) {
-      console.error("Error loading products:", error)
-    } finally {
-      setLoading(false)
-    }
+  const loadProducts = () => {
+    const data = getProducts()
+    setProducts(data)
   }
 
   const formatCurrency = (amount: number) => {
@@ -113,7 +125,7 @@ export default function TransaksiPage() {
     return cash - getTotalAmount()
   }
 
-  const processTransaction = async () => {
+  const processTransaction = () => {
     if (cart.length === 0) return
 
     if (paymentMethod === "tunai" && getChange() < 0) {
@@ -121,49 +133,30 @@ export default function TransaksiPage() {
       return
     }
 
-    setProcessing(true)
-
-    try {
-      const transactionData = {
-        total: getTotalAmount(),
-        payment_method: paymentMethod,
-        cash_received: paymentMethod === "tunai" ? Number.parseFloat(cashReceived) : null,
-        change_amount: paymentMethod === "tunai" ? getChange() : null,
-      }
-
-      const items = cart.map((item) => ({
-        product_id: item.id,
-        product_name: item.name,
+    const transaction = {
+      id: Date.now().toString(),
+      date: new Date().toISOString(),
+      items: cart.map((item) => ({
+        name: item.name,
         price: item.price,
         quantity: item.quantity,
-        subtotal: item.subtotal,
-      }))
-
-      const transaction = await createTransaction(transactionData, items)
-
-      if (transaction) {
-        // Redirect to receipt page
-        router.push(`/struk/${transaction.id}`)
-      } else {
-        alert("Gagal memproses transaksi. Silakan coba lagi.")
-      }
-    } catch (error) {
-      console.error("Error processing transaction:", error)
-      alert("Terjadi kesalahan. Silakan coba lagi.")
-    } finally {
-      setProcessing(false)
+      })),
+      total: getTotalAmount(),
+      paymentMethod,
+      cashReceived: paymentMethod === "tunai" ? Number.parseFloat(cashReceived) : getTotalAmount(),
+      change: paymentMethod === "tunai" ? getChange() : 0,
     }
-  }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Memuat produk...</p>
-        </div>
-      </div>
-    )
+    // Save to localStorage
+    const transactions = JSON.parse(localStorage.getItem("transactions") || "[]")
+    transactions.push(transaction)
+    localStorage.setItem("transactions", JSON.stringify(transactions))
+
+    // Save using utility function
+    saveTransaction(transaction)
+
+    // Redirect to receipt page
+    router.push(`/struk/${transaction.id}`)
   }
 
   return (
@@ -196,9 +189,6 @@ export default function TransaksiPage() {
                     {products.map((product) => (
                       <SelectItem key={product.id} value={product.id}>
                         {product.name} - {formatCurrency(product.price)}
-                        {product.stock !== null && product.stock !== undefined && (
-                          <span className="text-gray-500 ml-2">(Stok: {product.stock})</span>
-                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -351,16 +341,11 @@ export default function TransaksiPage() {
               )}
 
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowPayment(false)}
-                  className="flex-1"
-                  disabled={processing}
-                >
+                <Button variant="outline" onClick={() => setShowPayment(false)} className="flex-1">
                   Batal
                 </Button>
-                <Button onClick={processTransaction} className="flex-1" disabled={processing}>
-                  {processing ? "Memproses..." : "Selesai"}
+                <Button onClick={processTransaction} className="flex-1">
+                  Selesai
                 </Button>
               </div>
             </CardContent>
