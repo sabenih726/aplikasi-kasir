@@ -6,7 +6,7 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Kasir Toko Roti - Sistem POS UMK",
+  title: "Kasir Toko Lely",
   description: "Aplikasi kasir digital untuk toko roti dengan struk digital",
     generator: 'v0.dev'
 }
