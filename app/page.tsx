@@ -62,8 +62,8 @@ export default function Dashboard() {
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-gray-900">Kasir Toko Roti</h1>
-          <p className="text-gray-600">Sistem Point of Sale untuk UMK</p>
+          <h1 className="text-3xl font-bold text-gray-900">Kasir Toko Lely</h1>
+          <p className="text-gray-600">Aplikasi Kasir Digital</p>
           <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh Data
